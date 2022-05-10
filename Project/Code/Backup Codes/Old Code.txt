@@ -1,0 +1,148 @@
+
+; You may customize this and other start-up templates; 
+; The location of this template is c:\emu8086\inc\0_com_template.txt
+
+org 100h
+
+; add your code here
+.data
+    EGradeTxt db "Enter Grade: "
+    
+    Grade_digits db 0, 0, 0
+    grade db 0
+    ;sum dw 0
+    
+.code
+    mov ax, @data
+    mov ds, ax
+    
+    ;The following code is to output "Enter Grade" text.
+    mov cx, 13
+    mov ah, 2
+    mov si, 0
+    
+    EnterGrade:
+        mov dl, EGradeTxt[si]
+        inc si
+        int 21h
+        
+        loop EnterGrade
+    
+    call ReadGrades
+    
+    
+        
+ret
+
+proc ReadGrades
+    
+    
+    grades: 
+        mov ah, 1
+                    
+        mov cx, 3
+        mov si, 0
+        
+        call Initialize_digits
+        
+        digits:
+            int 21h
+            
+            cmp al, 0Dh
+            Je newLine
+            ;If the user press th 'Enter' key 
+            ;it jumps to newline lable which insert a new line 
+            ;& returns carriage(returns to the beginning of the line)
+            ;after that it starts the next iteration of drades label).
+            
+            
+            sub al, 30h
+            mov grade_digits[si], al
+            inc si
+            
+            loop digits
+             
+        newLine:
+            mov ah, 2
+            mov dl, 0Ah
+            int 21h
+            mov dl, 0Dh
+            int 21h
+        
+        call DigitsToGrade       
+         
+        loop grades
+    
+    ;exit_Read:
+    ;ret
+    
+ReadGrades endp
+
+
+
+
+proc Initialize_digits
+    mov si, 0
+    mov cx, 3
+    
+    assign:
+          mov Grade_digits[si], 0
+          inc si
+          
+        loop assign
+    ret
+Initialize_digits endp
+
+
+
+
+
+
+proc DigitsToGrade
+    HundredDigit:
+        cmp Grade_digits[0], 0
+        Je TenthsDigit
+        
+        
+        mov bx, 0
+        
+        mov cl, Grade_digits[0]
+        mov ch, 0
+        
+        HundredSum:
+            add bl, 100
+            loop HundredSum
+            
+        add grade, bl
+                             
+                             
+            
+   TenthsDigit:
+        cmp Grade_digits[1], 0
+        Je OnesDigit
+        
+        
+        mov bx, 0
+        
+        mov cl, Grade_digits[1]
+        mov ch, 0
+        
+        TengthsSum:
+            add bl, 10
+            loop TengthsSum
+        
+        add grade, bl    
+    
+   OnesDigit:
+        cmp Grade_digits[2], 0
+        Je exit_digitsToGrade
+        
+        
+        mov bl, Grade_digits[2]
+        add grade, bl 
+        
+        
+    exit_digitsToGrade:
+        ret
+    
+DigitsToGrade endp

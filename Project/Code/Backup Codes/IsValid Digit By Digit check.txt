@@ -1,0 +1,35 @@
+cmp GradeDigits[0], 0Dh
+    Je NotValid
+    
+    mov bl, GradeDigits[0]
+    add bl, 30h
+    
+    cmp bl, 30h
+    JL  NotValid
+    
+    cmp bl, 31h
+    JG NotValid
+    
+                   
+    
+                   
+    mov bl, GradeDigits[1]
+    add bl, 30h
+    
+    cmp bl, 30h
+    JL NotValid
+    
+    cmp bl, 39h
+    JG NotValid
+    
+    
+    
+    
+    mov bl, GradeDigits[2]
+    add bl, 30h
+    
+    cmp bl, 30h
+    JL NotValid
+    
+    cmp bl, 39h
+    JG NotValid
