@@ -11,10 +11,9 @@ org 100h
 
 .stack 100
 
-; add your code here
 .data
     EGradeTxt db "Enter Grade: "
-    
+     
     GradeDigits db 0, 0, 0
     validGrade db 1
     grade db 0
@@ -39,19 +38,15 @@ org 100h
     
     AvgTxt db "Average is: "
     
-    ExitMessage db "To exit press on 'Next' in 10"
-    MouseMessageCount db 10
-    
-    InLoopTenCount db 0
-    
+    ValidInput db 1
     
     ExitFlag db 0
     
     ClickXposition dw 0
     ClickYposition dw 0
     
-    MouseLoopCount db 0
-    
+    BufferFlag db 0
+    MyCount db 0
     
 .code
     mov ax, @data
@@ -62,12 +57,12 @@ org 100h
     mov ah, 2
     mov si, 0
     
-    EnterGrade:
+    EnterGradePrint:
         mov dl, EGradeTxt[si]
         inc si
         int 21h
         
-        loop EnterGrade
+        loop EnterGradePrint
         
         
     call DrawNext 
@@ -81,173 +76,296 @@ org 100h
     call PrintExcellentCount
     
     mov cx, 0
-    Run::
-        push cx
-        mov ah, 2
+    Run:
+        
+        
         
         mov  ax, 0000h  ; reset mouse
         int  33h
         
-        call PrintNextMssg
         
-        mov InLoopTenCount, 0
-        mov MouseMessageCount, 10
-        MouseInput:
-            
-            mov ax, 3
-            int 33h
-            cmp bx, 1
-            Je exitRun
-                       
-            cmp InLoopTenCount, 10
-            Je UpdateMessageCounters
-            
-            cmp MouseLoopCount, 100
-            Je exitMouseLoop
-                        
-            
-            inc MouseLoopCount
-            
-            inc InLoopTenCount           
-            
-            jmp MouseInput
         
-        exitMouseLoop:
-            mov MouseLoopCount, 0
-            
-            call ClearNextMssg
-            
-                
-                
-        mov ah, 2
-        mov bh, 0
-        mov dh, 0
-        mov dl, 13
-        int 10h
-        
-        mov validGrade, 1 ; Assuming the new value is valid and checking whether it's valid or not By (IsValid). In case that the value of previous grade entered was 
+        mov validGrade, 1 ; Assuming the new value is valid
+        ; and checking whether it's valid or not By (IsValid).
+        ; In case that the value of previous grade entered was 
         ;invalid (so the validGrade is assigned to 0) therfore here I re-assign it to 1.
         
-        ;In the iterations following the first iteration the grade will be storing values
-        ;from previous iteration, so in the beginning of each iteration assign 0 to grade.
+        ;In each iteration except the first iteration the grade will be storing values
+        ;from the previous iteration, so in the beginning of each iteration assign 0 to grade.
         
         mov grade, 0 
                 
         call Initialize_digits
-        call ReadGrade
+        call ReadInput    
+                
+                
+        ;mov ah, 2
+        ;mov bh, 0
+        ;mov dh, 0
+        ;mov dl, 13
+        ;int 10h
         
         
-        call DigitsToGrade
         
-        call IsValid        
-        cmp validGrade, 0
-        Je Run
+        ContinueInMain:: 
+            
+            cmp ExitFlag, 1
+            Je exitProgram
+        
+            call DigitsToGrade
+        
+            call CheckValidGrade        
+            cmp validGrade, 0
+            Je Run
         
                 
-        call SortGrade
         
-        call AddToSum
+            call SortGrade
         
-        call PrintFailCount
-        call PrintFairCount
-        call PrintGoodCount
-        call PrintVGoodCount
-        call PrintExcellentCount
+            call AddToSum
         
-        pop cx
-        loop Run
+            
+                    
+            call PrintFailCount
+            call PrintFairCount
+            call PrintGoodCount
+            call PrintVGoodCount
+            call PrintExcellentCount
         
+            mov cx, 0 
+        
+            loop Run
+          
+       
+                  
+        
+        exitProgram:              
+            call ClearScreen
+        
+            call CalculateAvg
+        
+            call PrintAvg
+            
+            mov AH, 4Ch 
+            INT 21h 
+     
+     ret
+
+
+proc Initialize_digits
+    mov si, 0
+    mov cx, 3
+    
+    assign:
+          mov GradeDigits[si], 0
+          inc si
+          
+        loop assign
+    ret
+Initialize_digits endp
+
+
+proc ReadInput
+        
+        
+        
+        mov cx, 3
+        mov si, 0
+        
+        ReadDigits:
+           cmp ExitFlag, 1
+           Je CheckExitInput
+           
+           push cx
+           
+           
+           call CheckBuffer 
+           mov ah, 6
+	       mov dl, 255
+	       int 21h            
+           push ax
+           
+            
+           cmp al, 00h
+           Jne CheckKeyboardInput
+                 
+            ;Continue Reading if 
+            ;the input is invalid as long as the user 
+            ;didn't click the left button of the mouse.    
+                 
+            CheckMouse:
+                mov ax, 3
+                int 33h
+                
+                cmp bx, 1
+                Je CheckExitInput
+        
+            CheckKeyboardInput:
+                pop ax
+                
+                cmp al, 00h
+                Je ValidZero
+                ; In case that the input digit is zero
+                ;(00h add 30 h to it (to make it valid))
+                
+                InValidZero:
+                call CheckInputValidation
+                
+                cmp ValidInput, 0
+                Je ReadDigits
+                
+                jmp PrepareAndStore
+                
+            ValidZero:
+               cmp BufferFlag, 0
+               Je InValidZero
+               
+               mov BufferFlag, 0
+               ;if it's valid (ther's a buffer re-set the bufferFlag to 0).
+               ;mov BufferFlag, 0
+               
+               add al, 30h
+               push ax ;When returning to CheckKeyboardInput (pop ax). 
+               jmp CheckKeyboardInput
+               ;Now after added 30h to 00h it's valid and no harm 
+               ;from jumping back to CheckKeyboardInput because it's not 00h now (it's 30h).
+            
+            
+            ;If the user press th 'Enter' key 
+            ;it jumps to NewGrade lable which insert a new line 
+            ;& returns carriage(returns to the beginning of the line)
+            ;after that it starts the next iteration of drades label).
+            
+            PrepareAndStore:
+                cmp al, 0Dh
+                Je NewGrade
+            
+            
+                sub al, 30h     
+                mov GradeDigits[si], al
+            
+                inc si
+                pop cx
+            
+            loop ReadDigits
+            
+        NewGrade:
+            ; Returning the cursor to the beginning
+            ; of the grade (the first digit of the grade)
+            ; and after that clearing each digit.
+            ;mov ah, 2
+             
+            ;mov bh, 0 ; Page one (zero based).            
+            ;mov dh, 0 ; Row one (zero based).
+            ;mov dl, 13 ; Column 14 (zero based).
+            ;int 10h
+             
+            push cx
+             
+            ;call ClearGrade
+         
+            pop cx ; pop the the value of cx used for digits loop stored in stack (pop it from stack to cx (needed for comparisons).
+        
+         
+           cmp cx, 3
+           Je exit_Read
+      
+        
+            ;Check for special case that the user enters two digits (store the digits in a correct order in GradeDigits).
+            cmp cx, 2
+            JE Swap1
+        
+            ;Check for special case that the user enters one digit only(store the digits in a correct order in GradeDigits).
+            cmp cx, 1
+            JE Swap2
+        
+            
+        inc mycount
+        exit_ReadInput:            
+            jmp ContinueInMain     
+        
+                  
+              
+        ;StartReadingAgain:            
+            ;mov cx, 3
+            ;jmp ReadDigits
+        
+    
+        CheckExitInput:
+            mov ClickXposition, cx
+            mov ClickYposition, dx
+            call CheckCoordinates
+    
+            cmp ExitFlag, 1
+            Je exit_ReadInput
+        ;If the user clicked on 'Next' then it exits and goes to main
+        ; code and clear screen print average and terminates the program.
+        ; And if the user didn't it continue reading from the user.
+        
+        ContinueReading:
+            jmp ReadDigits   
+            
+        
+        
+        exit_Read:    
+            mov grade, 101d
+            jmp exit_ReadInput
+        ;exit_Read: Used for invalid case(when the user doesn't enter 
+        ;any digit(when the user hits Enter key in first digit).
         
        
-    exitRun:
-        mov ClickXposition, cx
-        mov ClickYposition, dx
-        call CheckExit
+       
+       Swap1:
+           call SwapFor1DigitCase   
+           jmp exit_ReadInput
+       
+       Swap2:
+            call SwapFor2DigitsCase   
+            jmp exit_ReadInput
     
-        cmp ExitFlag, 0
-        Je Run
-    
-        call ClearScreen
-        
-        call CalculateAvg
-        
-        call PrintAvg
-    
-        ret
-    
-    UpdateMessageCounters:
-        mov InLoopTenCount, 0
-        dec MouseMessageCount
-        call PrintMouseMessageCountInMessage
-        jmp MouseInput
-    
-
-    ret 
 
 
 
-proc PrintNextMssg
-    
-   mov cx, 29
-   mov si, 0 
-        
-   mov ah, 2
-   mov bh, 0
-   mov dh, 4
-   mov dl, 0
-   int 10h
-   PrintExitMssg:
-        mov dl, ExitMessage[si]
-        inc si
-        int 21h
-        loop PrintExitMssg
-    
-    ret
-PrintNextMssg endp
+ReadInput endp
 
-
-proc ClearNextMssg
-    
-    mov ah, 2
-    mov bh, 0
-    mov dh, 4
-    mov dl, 0
-    int 10h  
-            
-    mov cx, 29
-    ClearExitMssg:
-        mov dl, 00h                
-        int 21h
-        loop ClearExitMssg
-    
-    ret
-ClearNextMssg endp
-
-
-proc PrintMouseMessageCountInMessage
-    
-    mov ah, 2
-    mov bh, 0
-    mov dh, 4
-    
-    ;To clear the 0 of the '10' in the Next(Exit) Message.
-    mov dl, 28
-    int 10h    
-    mov dl, 00h
+proc CheckBuffer    
+    mov ah, 0Bh 
     int 21h
     
-    ;To print the MouseMessageCount of one digit in the end of the Next(Exit) Message.
-    mov dl, 27
-    int 10h
-    mov dl, MouseMessageCount
-    add dl, 30h
-    int 21h 
-     
-    ret
-PrintMouseMessageCountInMessage endp
+    cmp al, 0FFh
+    Je BufferExists
+                   
+    NoBuffer:
+        ret
+    
+    BufferExists:
+        mov BufferFlag, 1
+        ret
+        
+CheckBuffer endp
 
+proc CheckInputValidation
+    cmp al, 0Dh
+    Je IsValidInput
+    
+    cmp al, 30h
+    Jb NotValidInput
+    
+    cmp al, 39h
+    Ja NotValidInput
+    
+    
+    IsValidInput:
+        mov ValidInput, 1
+        ret
+    
+    NotValidInput:
+        mov ValidInput, 0
+        ret
+    
+CheckInputValidation endp
 
-proc CheckExit
+proc CheckCoordinates
     cmp ClickYposition, 10d
     Jb NotValidExit
     
@@ -267,99 +385,14 @@ proc CheckExit
     NotValidExit:    
         ret
         
-CheckExit endp
-
-proc Initialize_digits
-    mov si, 0
-    mov cx, 3
-    
-    assign:
-          mov GradeDigits[si], 0
-          inc si
-          
-        loop assign
-    ret
-Initialize_digits endp
-
-
-proc ReadGrade       
-        
-        mov ah, 1
-        
-        mov cx, 3
-        mov si, 0
-        
-        ReadDigits:
-            int 21h
-            
-            ;If the user press th 'Enter' key 
-            ;it jumps to NewGrade lable which insert a new line 
-            ;& returns carriage(returns to the beginning of the line)
-            ;after that it starts the next iteration of drades label).
-            
-            ;call IsValid & inside update AllGradesCount.
-            
-            cmp al, 0Dh
-            Je NewGrade
-            
-            
-            sub al, 30h     
-            mov GradeDigits[si], al
-            
-            inc si
-            
-            loop ReadDigits
-            
-        NewGrade:
-            ; Returning the cursor to the beginning
-            ; of the grade (the first digit of the grade)
-            ; and after that clearing each digit.
-            mov ah, 2
-             
-            mov bh, 0 ; Page one (zero based).            
-            mov dh, 0 ; Row one (zero based).
-            mov dl, 13 ; Column 14 (zero based).
-            int 10h
-             
-            push cx
-             
-            call ClearGrade
-         
-            pop cx ; pop the the value of cx used for digits loop stored in stack (pop it from stack to cx (needed for comparisons).
-        
-         
-           cmp cx, 3
-           Je exit_Read
-      
-        
-        ;Check for special case that the user enters two digits (store the digits in a correct order in GradeDigits).
-        cmp cx, 2
-        JE SwapFor1DigitCase   
-        
-        ;Check for special case that the user enters one digit only(store the digits in a correct order in GradeDigits).
-        cmp cx, 1
-        JE SwapFor2DigitsCase
-        
-        ret
-           
-    
-    ;exit_Read: Used for invalid case(when the user doesn't enter 
-    ;any digit(when the user hits Enter key in first digit).
-    
-    exit_Read:
-    
-        mov grade, 101d
-        ret
-    
-ReadGrade endp
-
+CheckCoordinates endp
 
 proc SwapFor1DigitCase
     
     mov bl, 0    
     xchg bl, GradeDigits[0]
     mov GradeDigits[2], bl
-        
+    
     ret
 
 SwapFor1DigitCase endp
@@ -436,29 +469,29 @@ DigitsToGrade endp
 
 
 
-proc IsValid
+proc CheckValidGrade
     cmp validGrade, 0
-    Je NotValid
+    Je NotValidGrade
     
     cmp grade, 0d
-    JL NotValid
+    JL NotValidGrade
     
     cmp grade, 100d
-    JG NotValid
+    JG NotValidGrade
     
     
-    Valid:
+    IsValidGrade:
         ;Update The counter of grades after entering a new grade.
         inc AllGradesCount
         ret
     
     
     
-    NotValid:
+    NotValidGrade:
         mov validGrade, 0
         ret   
         
-IsValid endp    
+CheckValidGrade endp    
 
 
 
@@ -525,25 +558,8 @@ SortGrade endp
 
 proc ClearGrade
               
-     ;To clear the 3 digits of the grade 
-     ;and even if the digits are not 3 (1 or 2) 
-     ;the cursor will always return 
-     ;to same column after clearing the grade.
-     mov ah, 2
-     mov cx, 3         
-     Clear:
-                
-             
-          mov dl, 00h ; Null ascii code is 00h
-          int 21h
-                
-          loop Clear
-                
-             
-          ;Returning the cursor to the same column
-          ;in the same row (row one) after clearing the grade.
-          mov dl, 13
-          int 10h     
+     mov ah, 0Ch
+     int 21h    
     
     
     ret
@@ -788,7 +804,7 @@ proc PrintGradesCategories
 PrintGradesCategories endp    
 
 proc PrintFailCount
-    
+    mov ah, 2
     mov bl, 0
     
     mov bh, 0
@@ -852,7 +868,7 @@ proc PrintFailCount
 PrintFailCount endp
 
 proc PrintFairCount
-    
+    mov ah, 2
     mov bl, 0
     
     mov bh, 0
@@ -916,7 +932,7 @@ proc PrintFairCount
 PrintFairCount endp
 
 proc PrintGoodCount
-    
+    mov ah, 2
     mov bl, 0
     
     mov bh, 0
@@ -980,7 +996,7 @@ proc PrintGoodCount
 PrintGoodCount endp    
     
 proc PrintVGoodCount
-    
+    mov ah, 2
     mov bl, 0
     
     mov bh, 0
@@ -1044,7 +1060,7 @@ proc PrintVGoodCount
 PrintVGoodCount endp    
 
 proc PrintExcellentCount
-    
+    mov ah, 2
     mov bl, 0
     
     mov bh, 0
@@ -1139,11 +1155,10 @@ proc ClearScreen
     int 10h
     
     mov ah, 2
-    
-    mov bh, 7
+    mov bh, 1
     mov dh, 0
     mov dl, 0
-    int 10h     
+    int 10h   
     
     ret
 ClearScreen endp
